@@ -1,0 +1,50 @@
+name: Get Official Dify Config (Latest)
+
+on: workflow_dispatch
+
+jobs:
+  download-config:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get Latest Release & Package
+        run: |
+          # 1. 向 GitHub API 查询最新的正式版本号 (例如 0.6.13)
+          # 这确保了你下载的代码和 'latest' 镜像是一致的
+          LATEST_TAG=$(curl -s https://api.github.com/repos/langgenius/dify/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          
+          echo "✅ 检测到官方最新版本: $LATEST_TAG"
+          
+          # 2. 直接下载该版本的源码包
+          echo "⬇️ 正在下载源码..."
+          curl -L "https://github.com/langgenius/dify/archive/refs/tags/${LATEST_TAG}.zip" -o source.zip
+          
+          # 3. 解压
+          unzip -q source.zip
+          
+          # 4. 进入解压后的文件夹 (通常叫 dify-0.6.13)
+          # 我们只需要里面的 'docker' 文件夹，其他的不要
+          cd dify-${LATEST_TAG#v}/docker
+          
+          # 5. 自动把 .env.example 复制一份为 .env (帮你省去一步操作)
+          if [ -f .env.example ]; then
+            cp .env.example .env
+            echo "✅ 已自动生成 .env 文件"
+          else
+            # 兼容旧版本路径
+            cp ../.env.example .env || true
+          fi
+          
+          # 6. 回到上级目录准备打包
+          cd ..
+          
+          # 7. 将 docker 文件夹打包
+          zip -r ../dify-docker-official.zip docker/
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dify-docker-config
+          path: dify-docker-official.zip
+          retention-days: 1
