@@ -1,0 +1,46 @@
+name: Download Docker Image to Artifact
+
+# 触发条件：手动触发 (Workflow Dispatch)
+on:
+  workflow_dispatch:
+    inputs:
+      image_name:
+        description: '请输入镜像名称 (例如: alpine:latest, nginx:1.21)'
+        required: true
+        default: 'alpine:latest'
+      architecture:
+        description: '架构 (例如: amd64, arm64)'
+        required: false
+        default: 'amd64'
+
+jobs:
+  download-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 准备环境
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. 拉取 Docker 镜像
+      - name: Pull Docker Image
+        run: |
+          echo "正在拉取镜像: ${{ inputs.image_name }} ..."
+          docker pull ${{ inputs.image_name }} --platform linux/${{ inputs.architecture }}
+
+      # 3. 将镜像保存为 .tar 文件
+      - name: Save Image to Tar
+        run: |
+          # 替换文件名中的斜杠和冒号，防止文件名非法
+          FILENAME=$(echo "${{ inputs.image_name }}" | tr '/:' '_')
+          echo "FILENAME=${FILENAME}" >> $GITHUB_ENV
+          
+          echo "正在打包镜像..."
+          docker save -o "${FILENAME}.tar" ${{ inputs.image_name }}
+
+      # 4. 上传为 GitHub Artifact (构建产物)
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-${{ env.FILENAME }}
+          path: ./*.tar
+          retention-days: 1 # 文件只保留1天，节省空间
